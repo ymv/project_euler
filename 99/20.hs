@@ -1,3 +1,5 @@
+import System.Random (randomRIO)
+
 -- Problem 1
 last' [] = undefined
 last' [x] = x
@@ -124,3 +126,36 @@ removeAt 1 (x:xs) = (x, xs)
 removeAt n (x:xs) = (r, x:t)
 	where
 		(r,t) = removeAt (n-1) xs
+
+-- Problem 21
+insertAt y xs 1 = y:xs
+insertAt y (x:xs) n = x:insertAt y xs (n-1)
+
+-- Problem 22
+range n m
+	| n == m = [n]
+	| otherwise = n:range (n+1) m
+
+-- Problem 23
+rnd_select xs 0 = return []
+rnd_select xs n = rnd >>= return . (flip removeAt) xs >>= moar
+	where
+		moar (x,tail) = rnd_select tail (n-1) >>= return . (:) x
+		rnd = randomRIO (1, length xs)
+
+-- Problem 24
+diff_select n max = rnd_select [1..max] n
+
+--Problem 25
+rnd_permu xs = rnd_select xs (length xs)
+
+-- Problem 26
+combinations n =  harvest . grow_n n . seed
+	where
+		seed xs = [([], xs)]
+		harvest = map fst
+		grow_n 0 xs = xs
+		grow_n n xs = grow_n (n-1) (grow xs)
+		grow xs = concatMap (uncurry iter) xs
+		iter p [] = []
+		iter p (x:xs) = (x:p, xs):iter p xs
