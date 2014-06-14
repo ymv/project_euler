@@ -35,37 +35,39 @@ tape_set :: a -> BFTape a -> BFTape a
 tape_set x (BFTape as _ cs) = BFTape as x cs
 
 execute :: (Enum pc, Monad m, BFSymbol s) => (pc -> Maybe BFOp) -> pc -> (s -> m ()) -> m s -> m BFHalt
-execute = execute' tape_new []
+execute rom pc io_out io_in = execute' tape_new [] pc (rom, io_out, io_in)
 	where
-		execute' tape stack rom pc io_out io_in =
+		execute' tape stack pc env@(rom, io_out, io_in) =
 			case rom pc of
 				Nothing -> return BFHEndOfROM
-				Just BFInc -> execute'' (tape_apply bfs_inc)
-				Just BFDec -> execute'' (tape_apply bfs_dec)
-				Just BFPInc -> execute'' tape_pinc
-				Just BFPDec -> execute'' tape_pdec
-				Just BFOut -> io_out (tape_get tape) >> execute'' id
-				Just BFIn -> io_in >>= execute'' . tape_set
-				Just BFEnd -> ret
+				Just BFInc -> do_tape_op (tape_apply bfs_inc)
+				Just BFDec -> do_tape_op (tape_apply bfs_dec)
+				Just BFPInc -> do_tape_op tape_pinc
+				Just BFPDec -> do_tape_op tape_pdec
+				Just BFOut -> io_out (tape_get tape) >> do_tape_op id
+				Just BFIn -> io_in >>= do_tape_op . tape_set
+				Just BFEnd -> recall
 				Just BFWhile
-					| bfs_is_zero $ tape_get tape ->
-						case fast_forward pc' 1 of
-							Nothing -> return BFHFFMiss
-							Just jump -> execute' tape stack rom jump io_out io_in
-					| otherwise -> call pc'
+					| bfs_is_zero $ tape_get tape -> fast_forward
+					| otherwise -> mark
 			where
-				execute'' f = execute' (f tape) stack rom pc' io_out io_in
-				pc' = succ pc
-				fast_forward i 0 = Just i
-				fast_forward i depth = case rom i of
-					Nothing -> Nothing
-					Just BFEnd -> fast_forward (succ i) (depth - 1)
-					Just BFWhile -> fast_forward (succ i) (depth + 1)
-					Just _ -> fast_forward (succ i) depth
-				call jump = execute' tape (pc:stack) rom jump io_out io_in
-				ret = case stack of
+				do_tape_op f = execute' (f tape) stack pc' env
+				mark = execute' tape (pc:stack) pc' env
+				recall = case stack of
 					[] -> return BFHStackUnderflow
-					(jump:stack') -> execute' tape stack' rom jump io_out io_in
+					(jump:stack') -> execute' tape stack' jump env
+				fast_forward = case find_end pc' 1 of
+					Nothing -> return BFHFFMiss
+					Just jump -> execute' tape stack jump env
+
+				pc' = succ pc
+				find_end i 0 = Just i
+				find_end i depth = case rom i of
+					Nothing -> Nothing
+					Just BFEnd -> find_end (succ i) (depth - 1)
+					Just BFWhile -> find_end (succ i) (depth + 1)
+					Just _ -> find_end (succ i) depth
+
 string_rom :: [Char] -> Int -> Maybe BFOp
 string_rom s pc
 	| length s <= pc = Nothing
