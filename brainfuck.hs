@@ -1,3 +1,6 @@
+import Data.Array.IArray
+import Data.List
+
 data BFTape a = BFTape [a] a [a]
 data BFOp = BFInc | BFDec | BFPInc | BFPDec | BFWhile | BFEnd | BFIn | BFOut
 data BFHalt = BFHEndOfROM | BFHStackUnderflow | BFHFFMiss deriving (Show)
@@ -69,19 +72,26 @@ execute rom pc io_out io_in = execute' tape_new [] pc (rom, io_out, io_in)
 					Just _ -> find_end (succ i) depth
 
 string_rom :: [Char] -> Int -> Maybe BFOp
-string_rom s pc
-	| length s <= pc = Nothing
-	| otherwise = decode $ s !! pc
-		where
-			decode '+' = Just BFInc
-			decode '-' = Just BFDec
-			decode '>' = Just BFPInc
-			decode '<' = Just BFPDec
-			decode '[' = Just BFWhile
-			decode ']' = Just BFEnd
-			decode ',' = Just BFIn
-			decode '.' = Just BFOut
-			decode _ = Nothing
+string_rom source = \pc -> if pc >= size then Nothing else Just $ mem ! pc
+	-- having "string_rom source pc" head and relying on currying fucks up memoization, so explict lambda
+	where
+		mem = listArray (0, size) ops :: Array Int BFOp
+		size = length ops
+		ops = unfoldr pop_op source
+		pop_op [] = Nothing
+		pop_op (x:xs) =
+			case decode x of
+				Just op -> Just (op, xs)
+				Nothing -> pop_op xs
+		decode '+' = Just BFInc
+		decode '-' = Just BFDec
+		decode '>' = Just BFPInc
+		decode '<' = Just BFPDec
+		decode '[' = Just BFWhile
+		decode ']' = Just BFEnd
+		decode ',' = Just BFIn
+		decode '.' = Just BFOut
+		decode _ = Nothing
 
 hello = string_rom "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
 ioread :: IO Int
